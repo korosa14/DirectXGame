@@ -58,5 +58,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//ウィンドウを表示
 	ShowWindow(hwnd, SW_SHOW);
+
+	MSG msg{};
+	//ウィンドウの×ボタンが押されるまでループ
+	while (msg.message != WM_QUIT) {
+		//Windowにメッセージが来てたら最優先で処理させる
+		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+		else {
+			//ゲームの処理
+		}
+	}
+
 	return 0;
 }
