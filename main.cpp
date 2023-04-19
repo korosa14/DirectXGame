@@ -1,6 +1,16 @@
 #include<Windows.h>
 #include<cstdint>
 #include<string>
+#include<format>
+#include<d3d12.h>
+#include<dxgi1_6.h>
+#include<cassert>
+
+//libのリンク
+#pragma comment(lib,"d3d12.lib")
+#pragma comment(lib,"dxgi.lib")
+
+
 //ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
 	WPARAM wparam, LPARAM lparam) {
@@ -18,6 +28,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
 
 void Log(const std::string& message) {
 	OutputDebugStringA(message.c_str());
+
+}
+void Log(const std::wstring& message) {
+	OutputDebugStringW(message.c_str());
 }
 
 std::wstring ConvertString(const std::string& str) {
@@ -92,6 +106,51 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//ウィンドウを表示
 	ShowWindow(hwnd, SW_SHOW);
 
+	//DXGIファクトリーの生成
+	IDXGIFactory7* dxgiFactory = nullptr;
+
+	HRESULT hr = CreateDXGIFactory(IID_PPV_ARGS(&dxgiFactory));
+
+	assert(SUCCEEDED(hr));
+
+	//使用するアダプタ用の変数,最初にnullptrを入れておく
+	IDXGIAdapter4* useAdapter = nullptr;
+	//良い順にアダプタを頼む
+	for (UINT i = 0; dxgiFactory->EnumAdapterByGpuPreference(i,
+		DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&useAdapter)) !=
+		DXGI_ERROR_NOT_FOUND; ++i) {
+		//アダプターの情報を取得する
+		DXGI_ADAPTER_DESC3 adapterDesc{};
+		hr = useAdapter->GetDesc3(&adapterDesc);
+		assert(SUCCEEDED(hr));
+		//ソフトウェアアダプタでなければ採用
+		if (!(adapterDesc.Flags & DXGI_ADAPTER_FLAG3_SOFTWARE)) {
+			//アダプタの情報をログに出力
+			Log(std::format(L"Use Adapater:{}\n", adapterDesc.Description));
+			break;
+		}
+		useAdapter = nullptr;
+	}
+	assert(useAdapter != nullptr);
+
+	ID3D12Device* device = nullptr;
+	//機能レベルとログ出力用の文字列
+	D3D_FEATURE_LEVEL featureLevels[] = {
+		D3D_FEATURE_LEVEL_12_2,D3D_FEATURE_LEVEL_12_1,D3D_FEATURE_LEVEL_12_0
+	};
+	const char* featureLeveLStrings[] = { "12.2","12.1","12.0" };
+	//高い順に生成
+	for (size_t i = 0; i < _countof(featureLevels); ++i) {
+		//アダプターでデバイス生成
+		hr = D3D12CreateDevice(useAdapter, featureLevels[i], IID_PPV_ARGS(&device));
+		if (SUCCEEDED(hr)) {
+			Log(std::format("FeatureLevel:{}\n", featureLeveLStrings[i]));
+			break;
+		}
+	}
+	assert(device != nullptr);
+	Log("Complete create D3D12Device!!!\n");//初期化完了のログを出す
+
 	MSG msg{};
 	//ウィンドウの×ボタンが押されるまでループ
 	while (msg.message != WM_QUIT) {
@@ -105,5 +164,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		}
 	}
 
+	
 	return 0;
 }
