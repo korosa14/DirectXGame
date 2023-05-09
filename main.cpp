@@ -270,6 +270,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//ゲームの処理
 			//バックバッファのインデックス
 	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
+	
+	//TranssitionBarrierの設定
+	D3D12_RESOURCE_BARRIER barrier{};
+	//今回のバリア
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	//None
+	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	//バリアを張る対象
+	barrier.Transition.pResource = swapChainResources[backBufferIndex];
+	//遷移前(現在)
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+	//遷移後
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	//TransitionBarrierを張る
+	commandList->ResourceBarrier(1, &barrier);
+
 	//描画先のRTVを設定
 	commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, nullptr);
 	//指定した色で画面全体をクリア
