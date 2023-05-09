@@ -290,7 +290,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, nullptr);
 	//指定した色で画面全体をクリア
 	float clearColor[] = { 0.1f,0.25f,0.5f,1.0f };
-	commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);;
+	commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
+	//RenderTargetからPresent
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+	//TransitionBarrierを張る
+	commandList->ResourceBarrier(1, &barrier);
 	hr = commandList->Close();
 	assert(SUCCEEDED(hr));
 	//GPUにコマンドリスト
@@ -298,13 +303,35 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	commandQueue->ExecuteCommandLists(1, commandLists);
 	//GPU
 	swapChain->Present(1, 0);
+
+	//初期値0でFenceを作る
+	ID3D12Fence* fence = nullptr;
+	uint64_t fenceValue = 0;
+	hr = device->CreateFence(fenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+	assert(SUCCEEDED(hr));
+	//FenceのSignalイベント作成
+	HANDLE fenceEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+	assert(fenceEvent != nullptr);
 	hr = commandAllocator->Reset();
 	assert(SUCCEEDED(hr));
 	hr = commandList->Reset(commandAllocator, nullptr);
 	assert(SUCCEEDED(hr));
+
+	//Fenceの値を更新
+	fenceValue++;
+	//Signalを送る
+	commandQueue->Signal(fence, fenceValue);
+
+	//初期化
+	if (fence->GetCompletedValue() < fenceValue)
+	{	//指定したSignal
+		fence->SetEventOnCompletion(fenceValue, fenceEvent);
+		//イベント待つ
+		WaitForSingleObject(fenceEvent, INFINITE);
+	}
+		
 		}
 	}
-
 	
 	return 0;
 }
