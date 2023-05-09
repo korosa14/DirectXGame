@@ -5,10 +5,13 @@
 #include<d3d12.h>
 #include<dxgi1_6.h>
 #include<cassert>
+#include<dxgidebug.h>
+
 
 //libのリンク
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
+#pragma comment(lib,"dxguid.lib")
 
 
 //ウィンドウプロシージャ
@@ -254,11 +257,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		filter.DenyList.pSeverityList = seveities;
 		//指定メッセージ表示抑制
 		infoQuene->PushStorageFilter(&filter);
-}
+	}
 #endif
 
 
 	MSG msg{};
+
+	//初期値0でFenceを作る
+	ID3D12Fence* fence = nullptr;
+	uint64_t fenceValue = 0;
+	hr = device->CreateFence(fenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+	assert(SUCCEEDED(hr));
+	//FenceのSignalイベント作成
+	HANDLE fenceEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+	assert(fenceEvent != nullptr);
+
 	//ウィンドウの×ボタンが押されるまでループ
 	while (msg.message != WM_QUIT) {
 		//Windowにメッセージが来てたら最優先で処理させる
@@ -269,69 +282,90 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		else {
 			//ゲームの処理
 			//バックバッファのインデックス
-	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
-	
-	//TranssitionBarrierの設定
-	D3D12_RESOURCE_BARRIER barrier{};
-	//今回のバリア
-	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	//None
-	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-	//バリアを張る対象
-	barrier.Transition.pResource = swapChainResources[backBufferIndex];
-	//遷移前(現在)
-	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-	//遷移後
-	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	//TransitionBarrierを張る
-	commandList->ResourceBarrier(1, &barrier);
+			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
-	//描画先のRTVを設定
-	commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, nullptr);
-	//指定した色で画面全体をクリア
-	float clearColor[] = { 0.1f,0.25f,0.5f,1.0f };
-	commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
-	//RenderTargetからPresent
-	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-	//TransitionBarrierを張る
-	commandList->ResourceBarrier(1, &barrier);
-	hr = commandList->Close();
-	assert(SUCCEEDED(hr));
-	//GPUにコマンドリスト
-	ID3D12CommandList* commandLists[] = { commandList };
-	commandQueue->ExecuteCommandLists(1, commandLists);
-	//GPU
-	swapChain->Present(1, 0);
+			//TranssitionBarrierの設定
+			D3D12_RESOURCE_BARRIER barrier{};
+			//今回のバリア
+			barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			//None
+			barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+			//バリアを張る対象
+			barrier.Transition.pResource = swapChainResources[backBufferIndex];
+			//遷移前(現在)
+			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+			//遷移後
+			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+			//TransitionBarrierを張る
+			commandList->ResourceBarrier(1, &barrier);
 
-	//初期値0でFenceを作る
-	ID3D12Fence* fence = nullptr;
-	uint64_t fenceValue = 0;
-	hr = device->CreateFence(fenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
-	assert(SUCCEEDED(hr));
-	//FenceのSignalイベント作成
-	HANDLE fenceEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-	assert(fenceEvent != nullptr);
-	hr = commandAllocator->Reset();
-	assert(SUCCEEDED(hr));
-	hr = commandList->Reset(commandAllocator, nullptr);
-	assert(SUCCEEDED(hr));
+			//描画先のRTVを設定
+			commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, nullptr);
+			//指定した色で画面全体をクリア
+			float clearColor[] = { 0.1f,0.25f,0.5f,1.0f };
+			commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
+			//RenderTargetからPresent
+			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+			//TransitionBarrierを張る
+			commandList->ResourceBarrier(1, &barrier);
+			hr = commandList->Close();
+			assert(SUCCEEDED(hr));
+			//GPUにコマンドリスト
+			ID3D12CommandList* commandLists[] = { commandList };
+			commandQueue->ExecuteCommandLists(1, commandLists);
+			//GPU
+			swapChain->Present(1, 0);
+			//Fenceの値を更新
+			fenceValue++;
+			//Signalを送る
+			commandQueue->Signal(fence, fenceValue);
 
-	//Fenceの値を更新
-	fenceValue++;
-	//Signalを送る
-	commandQueue->Signal(fence, fenceValue);
+			hr = commandAllocator->Reset();
+			assert(SUCCEEDED(hr));
+			hr = commandList->Reset(commandAllocator, nullptr);
+			assert(SUCCEEDED(hr));
 
-	//初期化
-	if (fence->GetCompletedValue() < fenceValue)
-	{	//指定したSignal
-		fence->SetEventOnCompletion(fenceValue, fenceEvent);
-		//イベント待つ
-		WaitForSingleObject(fenceEvent, INFINITE);
-	}
-		
+			
+
+			//初期化
+			if (fence->GetCompletedValue() < fenceValue)
+			{	//指定したSignal
+				fence->SetEventOnCompletion(fenceValue, fenceEvent);
+				//イベント待つ
+				WaitForSingleObject(fenceEvent, INFINITE);
+			}
+			
+			
 		}
+
+	}
+	CloseHandle(fenceEvent);
+	fence->Release();
+	rtvDescriptorHeap->Release();
+	swapChainResources[0]->Release();
+	swapChainResources[1]->Release();
+	swapChain->Release();
+	commandList->Release();
+	commandAllocator->Release();
+	commandQueue->Release();
+	device->Release();
+	useAdapter->Release();
+	dxgiFactory->Release();
+#ifdef _DEBUG
+	debugController->Release();
+#endif
+	CloseWindow(hwnd);
+
+	//リソースリークチェック
+	IDXGIDebug1* debug;
+	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debug)))) 
+	{
+		debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
+			debug->ReportLiveObjects(DXGI_DEBUG_APP, DXGI_DEBUG_RLO_ALL);
+			debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
+			debug->Release();
 	}
 	
 	return 0;
-}
+};
