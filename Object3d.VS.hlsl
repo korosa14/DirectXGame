@@ -1,13 +1,13 @@
 struct VertexShaderOutput {
-	/*float32_t4 position: SV_POSITI;*/
-	float32_t4 color : SV_TARGET0;
+	float32_t4 position : SV_POSITION;
+	/*float32_t4 color : SV_TARGET0;*/
 };
-struct VertexShaderInPut {
-	float32_t4 position : POSITIONO;
+struct VertexShaderInput {
+	float32_t4 position : POSITION0;
 };
 
 VertexShaderOutput main(VertexShanderInput input) {
-	VetexShaderOutput output;
+	VertexShaderOutput output;
 	output.position = input.position;
 	return output;
 }
@@ -16,8 +16,3 @@ VertexShaderOutput main(VertexShanderInput input) {
 //{
 //	return pos;
 //}
-PixelShaderOutput main() {
-	PixelShaderOutput output;
-	output.color = float32_t4(1.0, 1.0, 1.0, 1.0);
-	return output;
-}
