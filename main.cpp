@@ -294,7 +294,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//デバックレイヤー有効化
 		debugController->EnableDebugLayer();
 		//GPU側でもチェック
-		debugController->SetEnableGPUBaseValidation(TRUE);
+		debugController->SetEnableGPUBasedValidation(TRUE);
 	}
 #endif
 
@@ -304,7 +304,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ID3D12InfoQueue* infoQueue = nullptr;
 	if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
 		//ヤバいエラー時に止まる
-		infoQueue->SetBreakOnSeverity(D3D12_MASSAGE_SEVERITY_CORRUPTION, true);
+		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
 		//エラー時に止まる
 		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
 		//警告時に止まる
@@ -313,17 +313,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		infoQueue->Release();
 		//抑制するメッセージのID
 		D3D12_MESSAGE_ID denyIds[] = {
-			D3D12_MESSAGE_ID_RESOURCE_BARRIER_MISMATND_LIST_TYPE
+			D3D12_MESSAGE_ID_RESOURCE_BARRIER_MISMATCHING_COMMAND_LIST_TYPE
 		};
 		//抑制レベル
 		D3D12_MESSAGE_SEVERITY severities[] = { D3D12_MESSAGE_SEVERITY_INFO };
 		D3D12_INFO_QUEUE_FILTER filter{};
 		filter.DenyList.NumIDs = _countof(denyIds);
 		filter.DenyList.pIDList = denyIds;
-		filter.DenyList.NumSeveritise = _countof(severities);
-		filter.DenyList.pSeverityList = seveities;
+		filter.DenyList.NumSeverities = _countof(severities);
+		filter.DenyList.pSeverityList = severities;
 		//指定メッセージ表示抑制
-		infoQuene->PushStorageFilter(&filter);
+		infoQueue->PushStorageFilter(&filter);
 	}
 #endif
 
