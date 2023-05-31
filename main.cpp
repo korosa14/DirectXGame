@@ -128,7 +128,17 @@ IDxcBlob* CompileShader(
 	shaderSource->Release();
 	//バイナリを返却
 	return shaderBlob;
-
+	//Resoure作成
+	ID3D12Resource* CreateBufferResource(ID3D12Debug * device, size_t sizeInBytes);
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
+	//マテリアル用のリソース
+	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Vector4));
+	//マテリアルデータ
+	Vector4* materialData = nullptr;
+	//書き込みアドレスを取得
+	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
+	//赤を書き込み
+	*materialData = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
 	
 }
 
@@ -482,6 +492,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	scissorRect.top = 0;
 	scissorRect.bottom = kClientHeigt;
 
+	//RootSignature作成
+	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
+	descriptionRootSignature.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+	//RootParameter作成
+	D3D12_ROOT_PARAMETER rootParmeters[1] = {};
+	rootParmeters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;//CBVを使う
+	rootParmeters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;//PixelShaerで使う
+	rootParmeters[0].Descriptor.ShaderRegister = 0;//レジスタ番号０とバインド
+	descriptionRootSignature.pParameters = rootParmeters;//ルートパラメータ
+	descriptionRootSignature.NumParameters = _countof(rootParmeters);//配列の長さ
 
 
 	//ウィンドウの×ボタンが押されるまでループ
@@ -522,6 +543,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetPipelineState(graphicsPipelineState); //PSOを設定
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+			//マテリアルCBuffeの場所を設定
+			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
+
 			//描画（DrawCall/ドローコール）。3頂点で1つのインスタンス。インスタンスについては今後
 			commandList->DrawInstanced(3, 1, 0, 0);
 
@@ -560,8 +585,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			hr = commandList->Reset(commandAllocator, nullptr);
 			assert(SUCCEEDED(hr));
 		}
-
-
 
 	}
 	CloseHandle(fenceEvent);
