@@ -9,6 +9,7 @@
 #include<dxcapi.h>
 
 
+
 //libのリンク
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
@@ -128,18 +129,34 @@ IDxcBlob* CompileShader(
 	shaderSource->Release();
 	//バイナリを返却
 	return shaderBlob;
-	//Resoure作成
-	ID3D12Resource* CreateBufferResource(ID3D12Debug * device, size_t sizeInBytes);
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
-	//マテリアル用のリソース
-	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Vector4));
-	//マテリアルデータ
-	Vector4* materialData = nullptr;
-	//書き込みアドレスを取得
-	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
-	//赤を書き込み
-	*materialData = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
-	
+}
+
+
+//Resoure作成
+ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes)
+{
+	//ヒープの設定
+	D3D12_HEAP_PROPERTIES uploadHeapProperties{};
+	uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+		//頂点リソースの設定
+		D3D12_RESOURCE_DESC vertexResourceDecc{};
+	//バッファリソース
+	vertexResourceDecc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	vertexResourceDecc.Width = sizeInBytes;
+	//1にする
+	vertexResourceDecc.Height = 1;
+	vertexResourceDecc.DepthOrArraySize = 1;
+	vertexResourceDecc.MipLevels = 1;
+	vertexResourceDecc.SampleDesc.Count = 1;
+	//バッファの場合
+	vertexResourceDecc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	//実際に頂点リソースを作る
+	ID3D12Resource* resource = nullptr;
+	HRESULT hr = device->CreateCommittedResource(&uploadHeapProperties,
+		D3D12_HEAP_FLAG_NONE, &vertexResourceDecc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+		IID_PPV_ARGS(&resource));
+	assert(SUCCEEDED(hr));
+	return resource;
 }
 
 //Windowsアプリでのエントリーポイント(main関数)
@@ -492,9 +509,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	scissorRect.top = 0;
 	scissorRect.bottom = kClientHeigt;
 
-	//RootSignature作成
-	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
-	descriptionRootSignature.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	////RootSignature作成
+	//D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
+	//descriptionRootSignature.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	//RootParameter作成
 	D3D12_ROOT_PARAMETER rootParmeters[1] = {};
@@ -503,6 +520,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rootParmeters[0].Descriptor.ShaderRegister = 0;//レジスタ番号０とバインド
 	descriptionRootSignature.pParameters = rootParmeters;//ルートパラメータ
 	descriptionRootSignature.NumParameters = _countof(rootParmeters);//配列の長さ
+
+
+
+	
+	//ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
+	
+	//マテリアル用のリソース
+	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Vector4));
+	//マテリアルデータ
+	Vector4* materialData = nullptr;
+	//書き込みアドレスを取得
+	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
+	//赤を書き込み
+	*materialData = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
 
 
 	//ウィンドウの×ボタンが押されるまでループ
@@ -543,7 +574,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetPipelineState(graphicsPipelineState); //PSOを設定
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
+			
 			//マテリアルCBuffeの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 
@@ -609,6 +640,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rootSignature->Release();
 	pixelShaderBlob->Release();
 	vertexShaderBlob->Release();
+	materialResource->Release();
 
 #ifdef _DEBUG
 	debugController->Release();
