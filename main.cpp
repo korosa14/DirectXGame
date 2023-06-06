@@ -380,6 +380,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	descriptionRootSignature.Flags =
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
+	//RootParameter作成
+	D3D12_ROOT_PARAMETER rootParmeters[1] = {};
+	rootParmeters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;//CBVを使う
+	rootParmeters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;//PixelShaerで使う
+	rootParmeters[0].Descriptor.ShaderRegister = 0;//レジスタ番号０とバインド
+	descriptionRootSignature.pParameters = rootParmeters;//ルートパラメータ
+	descriptionRootSignature.NumParameters = _countof(rootParmeters);//配列の長さ
+
+
+
 	//シリアライズしてバイナリ
 	ID3DBlob* signatureBlob = nullptr;
 	ID3DBlob* errorBlob = nullptr;
@@ -513,15 +523,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
 	//descriptionRootSignature.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-	//RootParameter作成
-	D3D12_ROOT_PARAMETER rootParmeters[1] = {};
-	rootParmeters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;//CBVを使う
-	rootParmeters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;//PixelShaerで使う
-	rootParmeters[0].Descriptor.ShaderRegister = 0;//レジスタ番号０とバインド
-	descriptionRootSignature.pParameters = rootParmeters;//ルートパラメータ
-	descriptionRootSignature.NumParameters = _countof(rootParmeters);//配列の長さ
-
-
+	
 
 	
 	//ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
