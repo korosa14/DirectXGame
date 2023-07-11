@@ -139,14 +139,7 @@ Matrix4x4 MakeIdentity4x4()
 	return mat;
 }
 
-Matrix4x4 Inverse(const Matrix4x4& m1)
-{
-	Matrix4x4 reverse;
-	reverse.m[0][0] = m1.m[0][0] * m1.m[0][1] * m1.m[0][2] * m1.m[0][3] + m1.m[0][0] * m1.m[1][1] * m1.m[1][2] * m1.m[1][3] + m1.m[0][0] * m1.m[1][3] + m1.m[2][1] * m1.m[3][2]
-		- m1.m[0][0] * m1.m[1][3] * m1.m[2][2] * m1.m[3][1] - m1.m[0][0] * m1.m[1][2] * m1.m[2][1] * m1.m[3][3] - m1.m[0][0] * m1.m[1][1] * m1.m[2][3] * m1.m[3][2]
-		- m1.m[1][0] * m1.m[0][1] * m1.m[0][2] * m1.m[0][3] - m1.m[2][0] * m1.m[0][1] * m1.m[0][0];
-	return reverse;
-}
+
 
 Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip, float farClip)
 {
@@ -707,7 +700,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	Transform cameraTransform{ {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {0.0f,0.0f,-5.0f} };
 
-	Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+	
 
 	Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 	Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
