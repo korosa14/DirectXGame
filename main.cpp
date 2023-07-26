@@ -187,16 +187,11 @@ Matrix4x4 Inverse(const Matrix4x4& m) {
 //ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	
+	
+
 	if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam)) {
 		return true;
 	}
-
-	ImGui_ImplDX12_NewFrame();
-	ImGui_ImplWin32_NewFrame();
-	ImGui::NewFrame();
-
-	//開発用UIの処理
-	ImGui::ShowDemoWindow();
 	
 	//メッセージに応じてゲーム固有の処理を行う
 	switch (msg) {
@@ -732,7 +727,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Vector4));
 	Vector4* materialData = nullptr;
 	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
-	*materialData = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
+	Vector4 color = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
+	*materialData = color;
 
 	Transform transform{ {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {0.0f,0.0f,0.0f} };
 
@@ -773,7 +769,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		}
 		else
 		{
+			ImGui_ImplDX12_NewFrame();
+			ImGui_ImplWin32_NewFrame();
+			ImGui::NewFrame();
+
+			//開発用UIの処理
+			ImGui::ShowDemoWindow();
 			//ゲームの処理
+
+			ImGui::Begin("window");
+
+			ImGui::ColorEdit3("color 1", &color.x);
+
+			*materialData = color;
+
+			ImGui::End();
+
+
 
 			transform.rotate.y += 0.03f;
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
@@ -801,7 +813,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			float clearcolor[] = { 0.1f,0.25f,0.5f,1.0f };
 			commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearcolor, 0, nullptr);
-
+			
 			commandList->RSSetViewports(1, &viewport);  //Viewportを設定
 			commandList->RSSetScissorRects(1, &scissorRect); //Scirssorを設定
 			//RootSignatureを設定、PS０に設定しているけど別途設定が必要
@@ -814,10 +826,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 
+			ID3D12DescriptorHeap* descriptorHeaps[]{ srvDescriptoHeap };
+			commandList->SetDescriptorHeaps(1, descriptorHeaps);
+
 			//描画！（DrawCall/ドローコール）。３頂点で一つのインスタンス、インスタンスについては今後
 			commandList->DrawInstanced(3, 1, 0, 0);
 
+			//ImGuiの内部コマンドを生産する
+			ImGui::Render();
+
 			//画面に描く処理は終わり、画面に映すので、状態を遷移
+			
+			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
 			//今回はrendertargetからpresentにする
 			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
 			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
@@ -846,11 +866,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		}
 	}
 
-	ID3D12DescriptorHeap* descriptorHeaps[]{ srvDescriptoHeap };
-	commandList->SetDescriptorHeaps(1, descriptorHeaps);
-
-	//ImGuiの内部コマンドを生産する
-	ImGui::Render();
+	
+	
 
 	//出力ウィンドウへの文字出力
 	OutputDebugStringA("Hello,directX!\n");
