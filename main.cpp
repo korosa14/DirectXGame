@@ -783,6 +783,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			*materialData = color;
 
+			ImGui::SetWindowSize({ 200,100 });
+
 			ImGui::End();
 
 
