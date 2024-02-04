@@ -12,6 +12,8 @@
 #include <dxcapi.h>
 #pragma comment(lib, "dxcompiler.lib")
 #include <math.h>
+#include<numbers>
+
 #include "externals/imgui/imgui.h"
 #include "externals/imgui/imgui_impl_dx12.h"
 #include "externals/imgui/imgui_impl_win32.h"
@@ -27,6 +29,11 @@ struct Vector3
 	float x, y, z;
 };
 
+struct Vector2
+{
+	float x, y;
+};
+
 struct Matrix4x4
 {
 	float m[4][4];
@@ -37,6 +44,11 @@ struct Transform
 	Vector3 scale;
 	Vector3 rotate;
 	Vector3 translate;
+};
+
+struct VertexData {
+	Vector4 position;
+	Vector2 texcoord;
 };
 
 Matrix4x4 MakeRotateXMatrix(float radian)
@@ -147,11 +159,15 @@ Matrix4x4 MakeIdentity4x4()
 
 Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip, float farClip)
 {
-	return{ aspectRatio / fovY / 2, 0.0f,0.0f,0.0f,
-		   0.0f,0.0f,0.0f,0.0f,
-		   0.0f,0.0f,farClip / farClip - nearClip ,1.0f,
-		   0.0f,0.0f,-nearClip * farClip / (farClip - nearClip),0.0f };
+	float cotHalfFovV = 1.0f / std::tan(fovY / 2.0f);
+	return {
+		(cotHalfFovV / aspectRatio), 0.0f, 0.0f, 0.0f,
+		0.0f, cotHalfFovV, 0.0f, 0.0f,
+		0.0f, 0.0f, farClip / (farClip - nearClip), 1.0f,
+		0.0f, 0.0f, -(nearClip * farClip) / (farClip - nearClip), 0.0f
+	};
 }
+
 
 
 Matrix4x4 Inverse(const Matrix4x4& m) {
@@ -624,11 +640,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	assert(SUCCEEDED(hr));
 
 	//InputLayout
-	D3D12_INPUT_ELEMENT_DESC inputElementDescs[1] = {};
+	D3D12_INPUT_ELEMENT_DESC inputElementDescs[2] = {};
 	inputElementDescs[0].SemanticName = "POSITION";
 	inputElementDescs[0].SemanticIndex = 0;
 	inputElementDescs[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
 	inputElementDescs[0].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+
+	inputElementDescs[1].SemanticName = "TEXCOORD";
+	inputElementDescs[1].SemanticIndex = 0;
+	inputElementDescs[1].Format = DXGI_FORMAT_R32_FLOAT;
+	inputElementDescs[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+
 	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc{};
 	inputLayoutDesc.pInputElementDescs = inputElementDescs;
 	inputLayoutDesc.NumElements = _countof(inputElementDescs);
@@ -679,33 +701,98 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		IID_PPV_ARGS(&graphicsPipelineState));
 	assert(SUCCEEDED(hr));
 
+	//球表示用
+	const uint32_t kSubdivision = 12;
+	const uint32_t kNumSphereVertices = kSubdivision * kSubdivision * 6;
+	float pi = std::numbers::pi_v<float>;
+
 	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
 	Matrix4x4* transformationMatrixData = nullptr;
 	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixData));
 	*transformationMatrixData = MakeIdentity4x4();
 
+	//頂点リソース用のヒープの設定
+	D3D12_HEAP_PROPERTIES uploadHeapProperties{};
+	uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+	//頂点リソースの設定
+	D3D12_RESOURCE_DESC vertexResourceDesc{};
+	//バッファリソース。テクスチャの場合はまた別の設定をする
+	vertexResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER; //リソースのサイズ、今回はVector4を３頂点分
+	vertexResourceDesc.Width =sizeof(Vector4)*kNumSphereVertices;
+	//バッファの場合はこれらは１にする決まり
+	vertexResourceDesc.Height = 1;
+	vertexResourceDesc.DepthOrArraySize = 1;
+	vertexResourceDesc.MipLevels = 1;
+	vertexResourceDesc.SampleDesc.Count = 1;
+	//バッファの場合はこれにする決まり
+	vertexResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
 	//実際に頂点リソースを作る
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * kNumSphereVertices);
 
 	//頂点バッファビューを作製する
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
 	//リソースの先頭のアドレスから使う
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 	//使用するリソースのサイズは頂点３つ分のサイズ
-	vertexBufferView.SizeInBytes = sizeof(Vector4) * 3;
+	vertexBufferView.SizeInBytes = sizeof(VertexData) * kNumSphereVertices;
 	//１頂点あたりのサイズ
-	vertexBufferView.StrideInBytes = sizeof(Vector4);
+	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
-	Vector4* vertexData = nullptr;
+	VertexData* vertexData = nullptr;
 
 	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
 
-	vertexData[0] = { -0.5f, -0.5f, 0.0f, 1.0f };
+	////左下
+	//vertexData[0].position = { -0.5f, -0.5f, 0.0f, 1.0f };
+	//vertexData[0].texcoord = { 0.0f,1.0f };
+	////上
+	//vertexData[1].position = { 0.0f, 0.5f, 0.0f, 1.0f };
+	//vertexData[1].texcoord = { 0.5f,0.0f };
+	////右下
+	//vertexData[2].position = { 0.5f,-0.5f,0.0f,1.0f };
+	//vertexData[2].texcoord = { 1.0f,1.0f };
 
-	vertexData[1] = { 0.0f, 0.5f, 0.0f, 1.0f };
+	// 経度分割1つ分の角度
+	const float kLonEvery = pi * 2.0f / float(kSubdivision);
+	// 緯度分割1つ分の角度
+	const float kLatEvery = pi / float(kSubdivision);
 
-	vertexData[2] = { 0.5f,-0.5f,0.0f,1.0f };
+	// 緯度の方向に分割
+	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
+		float lat = -pi / 2.0f + kLatEvery * latIndex;
+		// 経度の方向に分割しながら線を描く
+		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
+			uint32_t startIndex = (latIndex * kSubdivision + lonIndex) * 6;
+			float lon = lonIndex * kLonEvery;
+			vertexData[startIndex].position.x = std::cos(lat) * std::cos(lon);
+			vertexData[startIndex].position.y = std::sin(lat);
+			vertexData[startIndex].position.z = std::cos(lat) * std::sin(lon);
+			vertexData[startIndex].position.w = 1.0f;
+			vertexData[startIndex].texcoord = { float(lonIndex) / float(kSubdivision), 1.0f - float(latIndex) / float(kSubdivision) };
 
+			vertexData[startIndex + 1].position.x = std::cos(lat + kLatEvery) * std::cos(lon);
+			vertexData[startIndex + 1].position.y = std::sin(lat + kLatEvery);
+			vertexData[startIndex + 1].position.z = std::cos(lat + kLatEvery) * std::sin(lon);
+			vertexData[startIndex + 1].position.w = 1.0f;
+			vertexData[startIndex + 1].texcoord = { float(lonIndex) / float(kSubdivision), 1.0f - float(latIndex + 1) / float(kSubdivision) };
+
+			vertexData[startIndex + 2].position.x = std::cos(lat) * std::cos(lon + kLonEvery);
+			vertexData[startIndex + 2].position.y = std::sin(lat);
+			vertexData[startIndex + 2].position.z = std::cos(lat) * std::sin(lon + kLonEvery);
+			vertexData[startIndex + 2].position.w = 1.0f;
+			vertexData[startIndex + 2].texcoord = { float(lonIndex + 1) / float(kSubdivision), 1.0f - float(latIndex) / float(kSubdivision) };
+
+			vertexData[startIndex + 3] = vertexData[startIndex + 2];
+			vertexData[startIndex + 4] = vertexData[startIndex + 1];
+
+			vertexData[startIndex + 5].position.x = std::cos(lat + kLatEvery) * std::cos(lon + kLonEvery);
+			vertexData[startIndex + 5].position.y = std::sin(lat + kLatEvery);
+			vertexData[startIndex + 5].position.z = std::cos(lat + kLatEvery) * std::sin(lon + kLonEvery);
+			vertexData[startIndex + 5].position.w = 1.0f;
+			vertexData[startIndex + 5].texcoord = { float(lonIndex + 1) / float(kSubdivision), 1.0f - float(latIndex + 1) / float(kSubdivision) };
+		}
+	}
 	//ビューポート
 	D3D12_VIEWPORT viewport{};
 	//クライアント領域のサイズと一緒にして画面全体に表示
@@ -735,13 +822,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Transform cameraTransform{ {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {0.0f,0.0f,-5.0f} };
 
 	
-
-	Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-	Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
-	Matrix4x4 viewMatrix = Inverse(cameraMatrix);
-	Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
-	Matrix4x4 worldViewProJectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
-	*transformationMatrixData = worldViewProJectionMatrix;
 
 	MSG msg{};
 
@@ -783,13 +863,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			*materialData = color;
 
+			ImGui::SetWindowSize({ 200,100 });
+
 			ImGui::End();
 
 
 
 			transform.rotate.y += 0.03f;
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-			*transformationMatrixData = worldMatrix;
+			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+			Matrix4x4 worldViewProJectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+			*transformationMatrixData = worldViewProJectionMatrix;
 
 
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
@@ -830,7 +916,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			//描画！（DrawCall/ドローコール）。３頂点で一つのインスタンス、インスタンスについては今後
-			commandList->DrawInstanced(3, 1, 0, 0);
+			commandList->DrawInstanced(kNumSphereVertices, 1, 0, 0);
 
 			//ImGuiの内部コマンドを生産する
 			ImGui::Render();
@@ -905,21 +991,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	vertexShaderBlob->Release();
 
 	//実際のcommandListのImGuiの描画コマンドを積む
-	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
+	//ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
 
 #ifdef _DEBUG
 	debugController->Release();
 #endif // _DEBUG
 	CloseWindow(hwnd);
 	//リリースチェック
-	IDXGIDebug1* debug;
+	/*IDXGIDebug1* debug;
 	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debug))))
 	{
 		debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
 		debug->ReportLiveObjects(DXGI_DEBUG_APP, DXGI_DEBUG_RLO_ALL);
 		debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
 		debug->Release();
-	}
+	}*/
 	
 
 	return 0;
