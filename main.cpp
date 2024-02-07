@@ -1027,6 +1027,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//TransitionBarrierを張る
 			commandList->ResourceBarrier(1, &barrier);
 
+
 			hr = commandList->Close();
 			assert(SUCCEEDED(hr));
 
